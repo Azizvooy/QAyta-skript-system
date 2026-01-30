@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Архитектура системы FIKSA - Мозаика 4xA4</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: auto;
+        }
+        
+        .print-container {
+            width: 2970px;  /* 2 листа A4 по ширине (210mm * 2 * 3.78px/mm) */
+            height: 4200px; /* 2 листа A4 по высоте (297mm * 2 * 3.78px/mm) */
+            background: white;
+            margin: 20px auto;
+            position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,0.3);
+        }
+        
+        /* Сетка для разделения на 4 листа */
+        .grid-lines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .grid-line-v {
+            position: absolute;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(to bottom, #ff6b6b 0%, transparent 50%, #ff6b6b 100%);
+            left: 50%;
+            opacity: 0.3;
+        }
+        
+        .grid-line-h {
+            position: absolute;
+            height: 2px;
+            width: 100%;
+            background: linear-gradient(to right, #ff6b6b 0%, transparent 50%, #ff6b6b 100%);
+            top: 50%;
+            opacity: 0.3;
+        }
+        
+        /* Маркеры листов */
+        .page-marker {
+            position: absolute;
+            font-size: 48px;
+            font-weight: bold;
+            color: rgba(0,0,0,0.05);
+            z-index: 1;
+        }
+        
+        .page-1 { top: 50px; left: 50px; }
+        .page-2 { top: 50px; right: 50px; }
+        .page-3 { bottom: 50px; left: 50px; }
+        .page-4 { bottom: 50px; right: 50px; }
+        
+        /* Элементы схемы */
+        .node {
+            position: absolute;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+            border: 3px solid;
+        }
+        
+        .node:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 60px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+        
+        .node-title {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+        
+        .node-content {
+            font-size: 18px;
+            line-height: 1.6;
+        }
+        
+        .node-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        /* Типы узлов */
+        .source {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #5568d3;
+        }
+        
+        .collector {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-color: #e74c3c;
+        }
+        
+        .database {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border-color: #3498db;
+        }
+        
+        .processor {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+            border-color: #2ecc71;
+        }
+        
+        .analytics {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+            border-color: #f39c12;
+        }
+        
+        .telegram {
+            background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+            color: white;
+            border-color: #0088cc;
+        }
+        
+        .automation {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #333;
+            border-color: #16a085;
+        }
+        
+        .reports {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            color: #333;
+            border-color: #e67e22;
+        }
+        
+        /* Стрелки связей */
+        .arrow {
+            position: absolute;
+            height: 4px;
+            transform-origin: left center;
+            background: linear-gradient(to right, #e74c3c, #3498db);
+            z-index: 0;
+        }
+        
+        .arrow::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -8px;
+            width: 0;
+            height: 0;
+            border-left: 20px solid #3498db;
+            border-top: 10px solid transparent;
+            border-bottom: 10px solid transparent;
+        }
+        
+        .arrow-label {
+            position: absolute;
+            background: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            white-space: nowrap;
+        }
+        
+        /* Легенда */
+        .legend {
+            position: absolute;
+            bottom: 100px;
+            right: 100px;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            border: 3px solid #333;
+            z-index: 999;
+        }
+        
+        .legend-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .legend-color {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            margin-right: 15px;
+            border: 2px solid #333;
+        }
+        
+        /* Заголовок */
+        .main-title {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 72px;
+            font-weight: bold;
+            color: #333;
+            text-align: center;
+            text-shadow: 4px 4px 8px rgba(0,0,0,0.1);
+            z-index: 999;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            position: absolute;
+            top: 200px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 32px;
+            color: #666;
+            text-align: center;
+            z-index: 999;
+        }
+        
+        /* Цифры статистики */
+        .stats-box {
+            position: absolute;
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            padding: 20px 40px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            border: 3px solid #e67e22;
+        }
+        
+        .stat-number {
+            font-size: 48px;
+            font-weight: bold;
+            color: #c0392b;
+        }
+        
+        .stat-label {
+            font-size: 18px;
+            color: #333;
+            margin-top: 5px;
+        }
+        
+        /* Кнопка печати */
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            z-index: 9999;
+        }
+        
+        .print-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            .print-button {
+                display: none;
+            }
+            .print-container {
+                margin: 0;
+                box-shadow: none;
+                page-break-inside: avoid;
+            }
+            @page {
+                size: A4 landscape;
+                margin: 0;
+            }
+        }
+        
+        /* Пульсация для важных узлов */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <button class="print-button" onclick="window.print()">🖨️ Печать (4xA4)</button>
+    
+    <div class="print-container">
+        <!-- Сетка для разделения -->
+        <div class="grid-lines">
+            <div class="grid-line-v"></div>
+            <div class="grid-line-h"></div>
+        </div>
+        
+        <!-- Маркеры листов -->
+        <div class="page-marker page-1">ЛИСТ 1</div>
+        <div class="page-marker page-2">ЛИСТ 2</div>
+        <div class="page-marker page-3">ЛИСТ 3</div>
+        <div class="page-marker page-4">ЛИСТ 4</div>
+        
+        <!-- Заголовок -->
+        <div class="main-title">СИСТЕМА АВТОМАТИЗАЦИИ FIKSA</div>
+        <div class="subtitle">Архитектура • Данные • Отчеты • Telegram</div>
+        
+        <!-- ЛИСТ 1: Источники данных и сбор -->
+        
+        <!-- Google Sheets -->
+        <div class="node source" style="top: 350px; left: 100px; width: 400px;">
+            <div class="node-icon">📊</div>
+            <div class="node-title">Google Sheets</div>
+            <div class="node-content">
+                <strong>Мастер-таблица:</strong><br>
+                1s0nbLCo6q_KoM0j...<br><br>
+                <strong>Листы операторов:</strong><br>
+                • 26 операторов<br>
+                • Сводки по дням<br>
+                • Тренды и аналитика<br><br>
+                <strong>⚡ Колонка E:</strong><br>
+                Фильтр по статусу
+            </div>
+        </div>
+        
+        <!-- Improved Collector -->
+        <div class="node collector pulse" style="top: 350px; left: 600px; width: 450px;">
+            <div class="node-icon">🔄</div>
+            <div class="node-title">Improved Collector</div>
+            <div class="node-content">
+                <strong>Функции:</strong><br>
+                ✅ Аутентификация Google API<br>
+                ✅ Получение списка операторов<br>
+                ✅ Сбор данных с фильтром E<br>
+                ✅ Валидация записей<br>
+                ✅ Сохранение в БД<br><br>
+                <strong>Фильтр:</strong><br>
+                if not status: continue<br><br>
+                <strong>Частота:</strong> Каждый час
+            </div>
+        </div>
+        
+        <!-- История 112 -->
+        <div class="node source" style="top: 850px; left: 100px; width: 400px;">
+            <div class="node-icon">📞</div>
+            <div class="node-title">История звонков 112</div>
+            <div class="node-content">
+                <strong>Excel импорт:</strong><br>
+                • Дата и время звонка<br>
+                • Код службы (102/103/104)<br>
+                • Номер инцидента<br>
+                • Телефон звонившего<br>
+                • Адрес<br>
+                • Описание<br><br>
+                <strong>📊 25,372 записей</strong>
+            </div>
+        </div>
+        
+        <!-- Заявки -->
+        <div class="node source" style="top: 1350px; left: 100px; width: 400px;">
+            <div class="node-icon">📋</div>
+            <div class="node-title">Заявки (Applications)</div>
+            <div class="node-content">
+                <strong>Источник:</strong><br>
+                Excel импорт<br><br>
+                <strong>Поля:</strong><br>
+                • Номер заявки<br>
+                • Телефон<br>
+                • Адрес<br>
+                • Статус<br>
+                • Дата импорта<br><br>
+                <strong>📊 23,150 заявок</strong>
+            </div>
+        </div>
+        
+        <!-- ЛИСТ 2: База данных -->
+        
+        <!-- SQLite Database -->
+        <div class="node database pulse" style="top: 600px; left: 1200px; width: 500px;">
+            <div class="node-icon">💾</div>
+            <div class="node-title">SQLite Database</div>
+            <div class="node-content">
+                <strong>fiksa_database.db</strong><br><br>
+                <strong>Таблицы:</strong><br>
+                📊 fiksa_records (13,070)<br>
+                📞 call_history_112 (25,372)<br>
+                📋 applications (23,150)<br>
+                👥 operator_stats_daily (26)<br><br>
+                <strong>Связи:</strong><br>
+                incident_number = full_name<br>
+                phone matching<br><br>
+                <strong>Индексы:</strong><br>
+                ✅ По дате<br>
+                ✅ По оператору<br>
+                ✅ По номеру инцидента
+            </div>
+        </div>
+        
+        <!-- Статистика 1 -->
+        <div class="stats-box" style="top: 300px; left: 1800px;">
+            <div class="stat-number">13,070</div>
+            <div class="stat-label">Записей FIKSA</div>
+        </div>
+        
+        <div class="stats-box" style="top: 450px; left: 1800px;">
+            <div class="stat-number">25,372</div>
+            <div class="stat-label">Звонков 112</div>
+        </div>
+        
+        <div class="stats-box" style="top: 600px; left: 1800px;">
+            <div class="stat-number">47.2%</div>
+            <div class="stat-label">Связано с FIKSA</div>
+        </div>
+        
+        <!-- ЛИСТ 3: Обработка и аналитика -->
+        
+        <!-- Analytics Reports -->
+        <div class="node analytics" style="top: 2300px; left: 150px; width: 450px;">
+            <div class="node-icon">📈</div>
+            <div class="node-title">Analytics Reports</div>
+            <div class="node-content">
+                <strong>3 типа отчетов:</strong><br><br>
+                <strong>1️⃣ Операторы</strong><br>
+                • 26 операторов<br>
+                • Всего / Положит. / Отриц.<br>
+                • % Успешных<br><br>
+                <strong>2️⃣ Фидбэки служб</strong><br>
+                • 3 листа Excel<br>
+                • Топ-500 проблемных<br><br>
+                <strong>3️⃣ Ответы граждан</strong><br>
+                • 15 типов ответов<br>
+                • Процентное соотношение
+            </div>
+        </div>
+        
+        <!-- Service Reports -->
+        <div class="node reports" style="top: 2300px; left: 700px; width: 450px;">
+            <div class="node-icon">📊</div>
+            <div class="node-title">Service Reports</div>
+            <div class="node-content">
+                <strong>61 отчет по службам:</strong><br><br>
+                <strong>🚔 Милиция (102):</strong><br>
+                • По районам<br>
+                • По участкам<br><br>
+                <strong>🚑 Скорая (103):</strong><br>
+                • По станциям<br><br>
+                <strong>🚒 Пожарная (104):</strong><br>
+                • По частям<br><br>
+                <strong>Связь с FIKSA:</strong><br>
+                ✅ Оператор<br>
+                ✅ Дата звонка<br>
+                ✅ Телефон<br>
+                ✅ Примечания
+            </div>
+        </div>
+        
+        <!-- Master Service -->
+        <div class="node automation pulse" style="top: 2900px; left: 150px; width: 500px;">
+            <div class="node-icon">⚙️</div>
+            <div class="node-title">Master Service</div>
+            <div class="node-content">
+                <strong>Автоматизация:</strong><br><br>
+                <strong>🕘 09:00 - Ежедневно:</strong><br>
+                1. Сбор данных FIKSA<br>
+                2. Импорт истории 112<br>
+                3. Генерация аналитики<br>
+                4. Отчеты по службам<br>
+                5. Отправка в Telegram<br><br>
+                <strong>⏰ Каждый час:</strong><br>
+                Синхронизация FIKSA<br><br>
+                <strong>⏱️ Каждые 30 мин:</strong><br>
+                Показ статистики
+            </div>
+        </div>
+        
+        <!-- ЛИСТ 4: Telegram и вывод -->
+        
+        <!-- Telegram Bot -->
+        <div class="node telegram pulse" style="top: 2200px; left: 2200px; width: 550px;">
+            <div class="node-icon">💬</div>
+            <div class="node-title">Telegram Bot</div>
+            <div class="node-content">
+                <strong>Интерактивное управление:</strong><br><br>
+                <strong>Команды:</strong><br>
+                📊 /stats - Статистика<br>
+                👥 /operators - Операторы<br>
+                🚨 /feedback - Фидбэки<br>
+                🔄 /update - Обновить<br><br>
+                <strong>Кнопки меню:</strong><br>
+                • Выбор службы (102/103/104)<br>
+                • Генерация отчетов<br>
+                • Все отчеты (61 файл)<br><br>
+                <strong>Текст понимает!</strong><br>
+                "статистика", "обновить",<br>
+                "операторы", "топ"<br><br>
+                <strong>📤 Автоотправка 09:00</strong>
+            </div>
+        </div>
+        
+        <!-- Reports Output -->
+        <div class="node reports" style="top: 2900px; left: 2200px; width: 550px;">
+            <div class="node-icon">📁</div>
+            <div class="node-title">Reports Output</div>
+            <div class="node-content">
+                <strong>Папки:</strong><br><br>
+                <strong>📂 reports/analytics/</strong><br>
+                • operator_performance_report.xlsx<br>
+                • service_feedback_report.xlsx<br>
+                • citizen_response_analysis.xlsx<br><br>
+                <strong>📂 reports/services/</strong><br>
+                • МИЛИЦИЯ_102_*.xlsx (30 файлов)<br>
+                • СКОРАЯ_103_*.xlsx (20 файлов)<br>
+                • ПОЖАРНАЯ_104_*.xlsx (11 файлов)<br><br>
+                <strong>💾 Telegram + Локально</strong>
+            </div>
+        </div>
+        
+        <!-- User -->
+        <div class="node" style="top: 3500px; left: 2350px; width: 400px; background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%); border-color: #e74c3c;">
+            <div class="node-icon">👤</div>
+            <div class="node-title">Пользователь</div>
+            <div class="node-content">
+                <strong>Доступ через:</strong><br><br>
+                📱 Telegram (основной)<br>
+                💻 Локальные файлы<br>
+                🖥️ Командная строка<br><br>
+                <strong>Получает:</strong><br>
+                ✅ Excel отчеты<br>
+                ✅ Статистику<br>
+                ✅ Уведомления<br>
+                ✅ Файлы по запросу
+            </div>
+        </div>
+        
+        <!-- Стрелки связей -->
+        
+        <!-- Google Sheets → Collector -->
+        <div class="arrow" style="top: 500px; left: 500px; width: 100px; transform: rotate(0deg);"></div>
+        <div class="arrow-label" style="top: 470px; left: 520px;">API</div>
+        
+        <!-- Collector → Database -->
+        <div class="arrow" style="top: 600px; left: 1050px; width: 150px; transform: rotate(0deg);"></div>
+        <div class="arrow-label" style="top: 570px; left: 1090px;">Сохранение</div>
+        
+        <!-- История 112 → Database -->
+        <div class="arrow" style="top: 1000px; left: 500px; width: 320px; transform: rotate(-20deg);"></div>
+        <div class="arrow-label" style="top: 950px; left: 650px;">Импорт Excel</div>
+        
+        <!-- Заявки → Database -->
+        <div class="arrow" style="top: 1500px; left: 500px; width: 380px; transform: rotate(-35deg);"></div>
+        <div class="arrow-label" style="top: 1400px; left: 700px;">Импорт</div>
+        
+        <!-- Database → Analytics -->
+        <div class="arrow" style="top: 1100px; left: 1200px; width: 450px; transform: rotate(70deg);"></div>
+        <div class="arrow-label" style="top: 1600px; left: 1150px;">SQL запросы</div>
+        
+        <!-- Database → Service Reports -->
+        <div class="arrow" style="top: 1100px; left: 1450px; width: 500px; transform: rotate(80deg);"></div>
+        <div class="arrow-label" style="top: 1700px; left: 1400px;">JOIN запросы</div>
+        
+        <!-- Analytics → Telegram -->
+        <div class="arrow" style="top: 2450px; left: 600px; width: 700px; transform: rotate(-5deg);"></div>
+        <div class="arrow-label" style="top: 2420px; left: 950px;">Excel файлы</div>
+        
+        <!-- Service Reports → Telegram -->
+        <div class="arrow" style="top: 2500px; left: 1150px; width: 550px; transform: rotate(15deg);"></div>
+        <div class="arrow-label" style="top: 2560px; left: 1400px;">61 файл</div>
+        
+        <!-- Master Service → Collector -->
+        <div class="arrow" style="top: 3050px; left: 650px; width: 800px; transform: rotate(-70deg);"></div>
+        <div class="arrow-label" style="top: 2000px; left: 900px;">Расписание</div>
+        
+        <!-- Telegram → Reports -->
+        <div class="arrow" style="top: 2750px; left: 2450px; width: 150px; transform: rotate(90deg);"></div>
+        <div class="arrow-label" style="top: 2820px; left: 2520px;">Отправка</div>
+        
+        <!-- Reports → User -->
+        <div class="arrow" style="top: 3450px; left: 2550px; width: 50px; transform: rotate(90deg);"></div>
+        <div class="arrow-label" style="top: 3470px; left: 2610px;">Доступ</div>
+        
+        <!-- Легенда -->
+        <div class="legend">
+            <div class="legend-title">🎨 ЛЕГЕНДА</div>
+            
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></div>
+                <span><strong>Источники данных</strong></span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"></div>
+                <span><strong>Сбор данных</strong></span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"></div>
+                <span><strong>База данных</strong></span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);"></div>
+                <span><strong>Обработка</strong></span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);"></div>
+                <span><strong>Аналитика</strong></span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);"></div>
+                <span><strong>Telegram</strong></span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);"></div>
+                <span><strong>Автоматизация</strong></span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);"></div>
+                <span><strong>Отчеты</strong></span>
+            </div>
+        </div>
+        
+        <!-- Дополнительная информация -->
+        <div class="node" style="top: 3500px; left: 150px; width: 500px; background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); border-color: #16a085;">
+            <div class="node-icon">📋</div>
+            <div class="node-title">Ключевые показатели</div>
+            <div class="node-content">
+                <strong>📊 База данных:</strong><br>
+                • 13,070 записей FIKSA<br>
+                • 25,372 звонков 112<br>
+                • 23,150 заявок<br>
+                • 26 операторов<br><br>
+                <strong>🎯 Связи:</strong><br>
+                • 47.2% звонков с FIKSA<br>
+                • Точное совпадение по инциденту<br><br>
+                <strong>⚡ Производительность:</strong><br>
+                • Обновление: каждый час<br>
+                • Генерация: ~5 минут<br>
+                • 64 Excel файла
+            </div>
+        </div>
+        
+        <!-- Версия и дата -->
+        <div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 24px; color: #999; text-align: center;">
+            <strong>Версия 1.0</strong> • 07 января 2026 • Production Ready<br>
+            <div style="margin-top: 10px; font-size: 18px;">
+                🚀 Полностью автоматизированная система • 🤖 Telegram управление • 📊 Аналитика в реальном времени
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Интерактивность при наведении
+        document.querySelectorAll('.node').forEach(node => {
+            node.addEventListener('mouseenter', function() {
+                this.style.zIndex = '500';
+            });
+            
+            node.addEventListener('mouseleave', function() {
+                this.style.zIndex = '';
+            });
+        });
+        
+        // Информация о печати
+        window.onbeforeprint = function() {
+            alert('Настройки печати:\n\n' +
+                  '1. Ориентация: Альбомная (Landscape)\n' +
+                  '2. Размер: A4\n' +
+                  '3. Масштаб: По размеру страницы\n' +
+                  '4. Листов: 4 (2x2)\n\n' +
+                  'После печати соедините листы мозаикой!');
+        };
+    </script>
+</body>
+</html>

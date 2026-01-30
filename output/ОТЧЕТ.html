@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ОТЧЕТ ПО ОБЗВОНУ ЗАЯВОК</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        .date {
+            margin-top: 10px;
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        .card {
+            background: white;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-box.green {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);
+        }
+        .stat-box.red {
+            background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
+        }
+        .stat-box.orange {
+            background: linear-gradient(135deg, #f09819 0%, #edde5d 100%);
+        }
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        tr:hover {
+            background: #f0f0f0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #56ab2f 0%, #a8e063 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 ПОЛНЫЙ ОТЧЕТ ПО ОБЗВОНУ ЗАЯВОК</h1>
+        <div class="date">Дата формирования: 05.01.2026 17:50</div>
+    </div>
+
+    <div class="card">
+        <h2>📈 ГЛАВНЫЕ ПОКАЗАТЕЛИ</h2>
+        <div class="stat-grid">
+            <div class="stat-box">
+                <div class="stat-label">ВСЕГО УНИКАЛЬНЫХ ЗАЯВОК</div>
+                <div class="stat-number">753,850</div>
+            </div>
+            <div class="stat-box green">
+                <div class="stat-label">✅ ПОЛОЖИТЕЛЬНЫЕ</div>
+                <div class="stat-number">345,720</div>
+                <div class="stat-label">45.86%</div>
+            </div>
+            <div class="stat-box red">
+                <div class="stat-label">❌ ОТРИЦАТЕЛЬНЫЕ</div>
+                <div class="stat-number">47,609</div>
+                <div class="stat-label">6.32%</div>
+            </div>
+            <div class="stat-box orange">
+                <div class="stat-label">📞 ДОЗВОНИЛИСЬ</div>
+                <div class="stat-number">393,329</div>
+                <div class="stat-label">52.18%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>🎯 ЭФФЕКТИВНОСТЬ</h2>
+        <p><strong>Конверсия в положительный результат от дозвонившихся:</strong></p>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 87.9%">87.90%</div>
+        </div>
+        <p><strong>Конверсия от всех заявок:</strong></p>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 45.86%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%)">45.86%</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📋 ДЕТАЛЬНАЯ СТАТИСТИКА</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Категория</th>
+                    <th>Количество</th>
+                    <th>Процент</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>✅ Положительные</td>
+                    <td>345,720</td>
+                    <td>45.86%</td>
+                </tr>
+                <tr>
+                    <td>❌ Отрицательные</td>
+                    <td>47,609</td>
+                    <td>6.32%</td>
+                </tr>
+                <tr>
+                    <td>📞 Нет ответа/Занято</td>
+                    <td>189,657</td>
+                    <td>25.16%</td>
+                </tr>
+                <tr>
+                    <td>🚫 Заявка закрыта</td>
+                    <td>159,199</td>
+                    <td>21.12%</td>
+                </tr>
+                <tr>
+                    <td>🏥 Медработники</td>
+                    <td>9,972</td>
+                    <td>1.32%</td>
+                </tr>
+                <tr>
+                    <td>📵 Соединение прервано</td>
+                    <td>1,195</td>
+                    <td>0.16%</td>
+                </tr>
+                <tr>
+                    <td>🔇 Тишина</td>
+                    <td>111</td>
+                    <td>0.01%</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>👥 ТОП-20 ОПЕРАТОРОВ</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Оператор</th>
+                    <th>Количество заявок</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>1</td><td>Narziyeva Gavxar Atxamjanovna</td><td>52,641</td></tr>
+                <tr><td>2</td><td>Xusniddinova Shaxnoza Akramovna</td><td>51,137</td></tr>
+                <tr><td>3</td><td>Sagdullayeva Moxinur Asqar qizi</td><td>47,857</td></tr>
+                <tr><td>4</td><td>Muxamadaliyeva Mufazzal Abduqaxxorovna</td><td>44,643</td></tr>
+                <tr><td>5</td><td>Rahimjonov Kamoliddin Olimjon o'g'li</td><td>44,547</td></tr>
+                <tr><td>6</td><td>Mirbabayeva Shirin Kaxramonovna</td><td>37,939</td></tr>
+                <tr><td>7</td><td>Karimova Durdona Toir qizi</td><td>36,599</td></tr>
+                <tr><td>8</td><td>Payziyeva Shoxista Navro'zjon qizi</td><td>35,792</td></tr>
+                <tr><td>9</td><td>Zokirjonova Surayyo Rustam qizi</td><td>35,480</td></tr>
+                <tr><td>10</td><td>Umarova Madina Talat qizi</td><td>35,414</td></tr>
+                <tr><td>11</td><td>Xoshimov Akromjon Axmadjon o'g'li</td><td>29,662</td></tr>
+                <tr><td>12</td><td>Sobirjonova Umidaxon Rustamovna</td><td>29,352</td></tr>
+                <tr><td>13</td><td>Xasanova Maftuna Askar qizi</td><td>24,803</td></tr>
+                <tr><td>14</td><td>Niyozova Nigora Abduvali qizi</td><td>21,957</td></tr>
+                <tr><td>15</td><td>Qosimov Firdavs Nuriddin o'g'li</td><td>18,249</td></tr>
+                <tr><td>16</td><td>Mavlyanova Dilobar Rustam qizi</td><td>18,070</td></tr>
+                <tr><td>17</td><td>Sirojiddinov Ismoilbek Shavkat o'g'li</td><td>17,380</td></tr>
+                <tr><td>18</td><td>Abduraximov Otabek Abdumanapovich</td><td>16,568</td></tr>
+                <tr><td>19</td><td>Mahmudjonova Mushtari Akram qizi</td><td>9,183</td></tr>
+                <tr><td>20</td><td>Zokirjonova Saida Murodjon qizi</td><td>7,837</td></tr>
+            </tbody>
+        </table>
+        <p style="text-align: center; color: #666; margin-top: 20px;">
+            <em>Всего уникальных операторов: 48</em>
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>📊 ИТОГОВЫЕ ПОКАЗАТЕЛИ</h2>
+        <div style="background: #f0f0f0; padding: 20px; border-radius: 8px;">
+            <p><strong>📌 Общее количество уникальных заявок:</strong> 753,850</p>
+            <p><strong>✅ Успешных положительных результатов:</strong> 345,720 (45.86%)</p>
+            <p><strong>🎯 Процент конверсии от дозвонившихся:</strong> 87.90%</p>
+            <p><strong>📞 Количество дозвонов:</strong> 393,329 (52.18%)</p>
+            <p><strong>⭐ Эффективность работы операторов:</strong> Высокая</p>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 40px; color: #666; font-size: 0.9em;">
+        <p>Источник данных: 167 CSV файлов из exported_sheets</p>
+        <p>Обработано записей: 1,482,281 | Уникальных карт: 753,850</p>
+    </div>
+
+</body>
+</html>

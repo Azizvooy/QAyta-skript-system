@@ -1,0 +1,5 @@
+# Конфигурация Telegram Bot
+# Получите токен у @BotFather
+BOT_TOKEN=8141079204:AAErNrjLqTu4Vj1_7VS2kjGFKcR3lU9L9N4
+# Получите chat_id у @userinfobot
+CHAT_ID=2012682567

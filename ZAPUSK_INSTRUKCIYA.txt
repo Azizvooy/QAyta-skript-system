@@ -1,0 +1,38 @@
+=================================================================
+               KAK ZAPUSTIT PROGRAMMU
+=================================================================
+
+VARIANT 1 (SAMYY PROSTOY):
+--------------------------
+Naydite na RABOCHEM STOLE yarlyk:
+  "Obrabotka 112.lnk"
+  
+Dvazhdy kliknite po nemu!
+
+
+VARIANT 2:
+--------------------------
+V papke proekta zapustite odin iz failov:
+  
+  ✓ START.bat                      (samyy kratkiy)
+  ✓ ЗАПУСК.bat                     (s soobshcheniyami)
+  ✓ ЗАПУСТИТЬ_ОБРАБОТКУ_ДАННЫХ.bat (podrobnyy)
+
+
+ESLI PROGRAMMA NE ZAPUSKAETSYA:
+--------------------------
+1. Provefte internet-soedinenie
+2. Provefte, chto proxy rabotaet (10.145.62.76:3128)
+3. Zapustite START.bat i posmotrite soobshchenie ob oshibke
+
+
+INSTRUKCIYA PO RABOTE:
+--------------------------
+Sm. fayl: КАК_ЗАПУСТИТЬ.md
+
+
+=================================================================
+Programma rabotaet pravilno! GUI otkryvaetsya.
+Esli voznikaet oshibka pri zagruzke Google Sheets - 
+provefte internet i proxy.
+=================================================================
