@@ -118,7 +118,7 @@ def create_database_schema():
                 caller_phone TEXT,
                 
                 -- Данные о происшествии
-                call_date DATE NOT NULL,
+                call_date DATE,
                 call_time TEXT,
                 address TEXT,
                 district TEXT,
@@ -172,7 +172,7 @@ def create_database_schema():
                 operator_id INTEGER NOT NULL,
                 
                 -- Данные фиксации
-                collection_date DATE NOT NULL,
+                collection_date DATE,
                 fixation_date DATETIME,
                 phone_called TEXT,
                 
@@ -332,27 +332,27 @@ def create_database_schema():
         conn.commit()
         log_operation('CREATE_SCHEMA', 'Схема БД успешно создана', 'SUCCESS')
         
-        print('✅ База данных успешно создана')
-        print(f'📍 Путь к БД: {DB_PATH}')
-        print(f'📝 Логи: {LOG_DIR}')
+        print('OK: База данных успешно создана')
+        print(f'Путь к БД: {DB_PATH}')
+        print(f'Логи: {LOG_DIR}')
         
         # Показываем созданные таблицы
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = cursor.fetchall()
-        print('\n📊 Созданные таблицы:')
+        print('\nСозданные таблицы:')
         for table in tables:
             print(f'   - {table[0]}')
         
         # Показываем созданные представления
         cursor.execute("SELECT name FROM sqlite_master WHERE type='view' ORDER BY name")
         views = cursor.fetchall()
-        print('\n👁️  Созданные представления (views):')
+        print('\nСозданные представления (views):')
         for view in views:
             print(f'   - {view[0]}')
             
     except Exception as e:
         log_operation('CREATE_SCHEMA', f'Ошибка: {str(e)}', 'ERROR')
-        print(f'❌ Ошибка при создании схемы: {e}')
+        print(f'ОШИБКА при создании схемы: {e}')
         conn.rollback()
         raise
     finally:
