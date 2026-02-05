@@ -117,11 +117,12 @@ def get_data_sheets(service, spreadsheet_id):
         return []
 
 def read_sheet_data(service, spreadsheet_id, sheet_name, operator_name):
-    """Читает данные с одного листа"""
+    """Читает данные с одного листа (все строки)"""
     try:
+        # Получаем ВСЕ данные листа (без ограничений)
         result = service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
-            range=f"'{sheet_name}'!A1:Z10000"
+            range=f"'{sheet_name}'!A:Z"
         ).execute()
         
         values = result.get('values', [])
