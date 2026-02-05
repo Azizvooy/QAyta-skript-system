@@ -20,7 +20,7 @@ pause
 
 echo.
 echo [ЗАПУСК] Обновление данных...
-python update_from_sheets.py
+python scripts\data_collection\sheets_to_db_collector.py
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

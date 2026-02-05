@@ -3,20 +3,24 @@
 С разделением на положительные, отрицательные и жалобы
 """
 import pandas as pd
-import glob
 import os
 from datetime import datetime
+from pathlib import Path
 
 def load_latest_matching():
-    """Загрузка последнего файла сопоставления"""
-    files = glob.glob('reports/СОПОСТАВЛЕНИЕ_ПО_ИНЦИДЕНТАМ_*.csv')
-    if not files:
-        raise FileNotFoundError("Не найден файл сопоставления")
+    """Загрузка данных из ALL_DATA_FIXED.csv"""
+    data_file = Path('data') / 'ALL_DATA_FIXED.csv'
     
-    latest = max(files, key=os.path.getctime)
-    print(f"Загружаю: {latest}")
+    # Если не в data/, проверяем корень
+    if not data_file.exists():
+        data_file = Path('ALL_DATA_FIXED.csv')
     
-    df = pd.read_csv(latest, low_memory=False)
+    if not data_file.exists():
+        raise FileNotFoundError(f"Не найден файл данных: {data_file}")
+    
+    print(f"Загружаю: {data_file}")
+    
+    df = pd.read_csv(data_file, encoding='utf-8-sig', low_memory=False)
     print(f"Загружено записей: {len(df):,}")
     
     return df
@@ -24,8 +28,15 @@ def load_latest_matching():
 def create_service_reports(df):
     """Создание отчётов по каждой службе"""
     
-    # Получаем список служб
-    services = sorted(df['Служба_112'].dropna().unique())
+    # Получаем список служб - проверяем разные варианты названий колонки
+    if 'Служба_112' in df.columns:
+        service_col = 'Служба_112'
+    elif 'Служба' in df.columns:
+        service_col = 'Служба'
+    else:
+        raise ValueError("Не найдена колонка со службой (Служба_112 или Служба)")
+    
+    services = sorted(df[service_col].dropna().unique())
     print(f"\nНайдено служб: {services}")
     
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
@@ -40,25 +51,25 @@ def create_service_reports(df):
         print('='*80)
         
         # Фильтруем данные по службе
-        df_service = df[df['Служба_112'] == service].copy()
+        df_service = df[df[service_col] == service].copy()
         
         print(f"Всего записей: {len(df_service):,}")
         
         # Определяем положительные и отрицательные
         df_service['Категория'] = 'Не определено'
         
-        # Положительные: есть "Положительно" или "положительный" в статусе
-        mask_positive = (
-            (df_service['Положительно'].astype(str).str.contains('Положительн', case=False, na=False)) |
-            (df_service['Статус_Sheets'].astype(str).str.contains('Положительн', case=False, na=False))
-        )
+        # Определяем какая колонка со статусом есть
+        status_col = 'Статус' if 'Статус' in df_service.columns else 'Статус_Sheets'
+        
+        # Положительные: есть "Положительно" или "положительный" или "qanoatlantir" в статусе
+        mask_positive = df_service[status_col].astype(str).str.contains('Положительн|qanoatlantir|қаноатлантир', case=False, na=False, regex=True)
         df_service.loc[mask_positive, 'Категория'] = 'Положительно'
         
-        # Отрицательные/Жалобы: есть жалоба или "отрицательный" в статусе
+        # Отрицательные/Жалобы: есть "отрицательный" или "qanoatlantirilmadi" в статусе или есть комментарий
+        comment_col = 'Комментарий' if 'Комментарий' in df_service.columns else 'Жалоба'
         mask_negative = (
-            (df_service['Есть_жалоба'] == True) |
-            (df_service['Жалоба'].notna()) |
-            (df_service['Статус_Sheets'].astype(str).str.contains('Отрицательн', case=False, na=False))
+            df_service[status_col].astype(str).str.contains('Отрицательн|qanoatlantirilmadi', case=False, na=False, regex=True) |
+            (df_service[comment_col].notna() & (df_service[comment_col].astype(str).str.strip() != ''))
         )
         df_service.loc[mask_negative, 'Категория'] = 'Отрицательно'
         
@@ -88,7 +99,6 @@ def create_service_reports(df):
                     'Процент положительных',
                     'Процент отрицательных',
                     '',
-                    'Уникальных инцидентов',
                     'Уникальных карт',
                     'Уникальных телефонов'
                 ],
@@ -101,9 +111,8 @@ def create_service_reports(df):
                     f"{positive_count/len(df_service)*100:.1f}%",
                     f"{negative_count/len(df_service)*100:.1f}%",
                     '',
-                    df_service['Инцидент_112'].nunique(),
-                    df_service['Карта_112'].nunique(),
-                    df_service['Телефон_112'].nunique()
+                    df_service['Номер карты'].nunique() if 'Номер карты' in df_service.columns else 0,
+                    df_service['Номер телефона'].nunique() if 'Номер телефона' in df_service.columns else 0
                 ]
             }
             df_summary = pd.DataFrame(summary_data)

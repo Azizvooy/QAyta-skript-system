@@ -2,20 +2,24 @@
 Создание детальной отчётности по службам с анализом по регионам
 """
 import pandas as pd
-import glob
 import os
 from datetime import datetime
+from pathlib import Path
 
 def load_latest_matching():
-    """Загрузка последнего файла сопоставления"""
-    files = glob.glob('reports/СОПОСТАВЛЕНИЕ_ПО_ИНЦИДЕНТАМ_*.csv')
-    if not files:
-        raise FileNotFoundError("Не найден файл сопоставления")
+    """Загрузка данных из ALL_DATA_FIXED.csv"""
+    data_file = Path('data') / 'ALL_DATA_FIXED.csv'
     
-    latest = max(files, key=os.path.getctime)
-    print(f"Загружаю: {latest}")
+    # Если не в data/, проверяем корень
+    if not data_file.exists():
+        data_file = Path('ALL_DATA_FIXED.csv')
     
-    df = pd.read_csv(latest, low_memory=False)
+    if not data_file.exists():
+        raise FileNotFoundError(f"Не найден файл данных: {data_file}")
+    
+    print(f"Загружаю: {data_file}")
+    
+    df = pd.read_csv(data_file, encoding='utf-8-sig', low_memory=False)
     print(f"Загружено записей: {len(df):,}")
     
     return df
@@ -23,8 +27,13 @@ def load_latest_matching():
 def create_service_reports_with_regions(df):
     """Создание отчётов по каждой службе с анализом по регионам"""
     
-    services = sorted(df['Служба_112'].dropna().unique())
-    print(f"\nНайдено служб: {services}")
+    # Получаем список служб - проверяем разные варианты названий колонки
+    if 'Служба_112' in df.columns:
+        service_col = 'Служба_112'
+    elif 'Служба' in df.columns:
+        service_col = 'Служба'
+    else:
+        raise ValueError("Не найдена колонка со службой (Служба_112 или Служба)")
     
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
     
@@ -36,28 +45,28 @@ def create_service_reports_with_regions(df):
         print(f"СЛУЖБА {service}")
         print('='*80)
         
-        df_service = df[df['Служба_112'] == service].copy()
+        df_service = df[df[service_col] == service].copy()
         
-        # ВАЖНО: Удаляем дубликаты по инциденту из Sheets для правильного подсчёта
-        # Один инцидент может быть в нескольких службах, но считаем его один раз
-        df_service_unique = df_service.drop_duplicates(subset=['Инцидент_Sheets'], keep='first')
+        # Уникальные записи по номеру карты
+        card_col = 'Номер карты' if 'Номер карты' in df_service.columns else 'Карта_112'
+        df_service_unique = df_service.drop_duplicates(subset=[card_col], keep='first')
         
         print(f"Всего записей (детальных): {len(df_service):,}")
         print(f"Уникальных инцидентов: {len(df_service_unique):,}")
         
-        # Определяем категории НА УНИКАЛЬНЫХ инцидентах
+        # Определяем категории НА УНИКАЛЬНЫХ записях
         df_service_unique['Категория'] = 'Не определено'
         
-        mask_positive = (
-            (df_service_unique['Положительно'].astype(str).str.contains('Положительн', case=False, na=False)) |
-            (df_service_unique['Статус_Sheets'].astype(str).str.contains('Положительн', case=False, na=False))
-        )
+        # Определяем какая колонка со статусом есть
+        status_col = 'Статус' if 'Статус' in df_service_unique.columns else 'Статус_Sheets'
+        comment_col = 'Комментарий' if 'Комментарий' in df_service_unique.columns else 'Жалоба'
+        
+        mask_positive = df_service_unique[status_col].astype(str).str.contains('Положительн|qanoatlantir|қаноатлантир', case=False, na=False, regex=True)
         df_service_unique.loc[mask_positive, 'Категория'] = 'Положительно'
         
         mask_negative = (
-            (df_service_unique['Есть_жалоба'] == True) |
-            (df_service_unique['Жалоба'].notna()) |
-            (df_service_unique['Статус_Sheets'].astype(str).str.contains('Отрицательн', case=False, na=False))
+            df_service_unique[status_col].astype(str).str.contains('Отрицательн|qanoatlantirilmadi', case=False, na=False, regex=True) |
+            (df_service_unique[comment_col].notna() & (df_service_unique[comment_col].astype(str).str.strip() != ''))
         )
         df_service_unique.loc[mask_negative, 'Категория'] = 'Отрицательно'
         
@@ -69,8 +78,13 @@ def create_service_reports_with_regions(df):
         
         # Также применяем категорию к полным данным для листов
         df_service['Категория'] = 'Не определено'
-        df_service.loc[mask_positive.reindex(df_service.index, fill_value=False), 'Категория'] = 'Положительно'
-        df_service.loc[mask_negative.reindex(df_service.index, fill_value=False), 'Категория'] = 'Отрицательно'
+        mask_positive_all = df_service[status_col].astype(str).str.contains('Положительн|qanoatlantir|қаноатлантир', case=False, na=False, regex=True)
+        mask_negative_all = (
+            df_service[status_col].astype(str).str.contains('Отрицательн|qanoatlantirilmadi', case=False, na=False, regex=True) |
+            (df_service[comment_col].notna() & (df_service[comment_col].astype(str).str.strip() != ''))
+        )
+        df_service.loc[mask_positive_all, 'Категория'] = 'Положительно'
+        df_service.loc[mask_negative_all, 'Категория'] = 'Отрицательно'
         
         # Создаём Excel файл
         service_num = str(service).replace('.0', '')
@@ -105,10 +119,10 @@ def create_service_reports_with_regions(df):
                     f"{positive_count/len(df_service_unique)*100:.1f}%",
                     f"{negative_count/len(df_service_unique)*100:.1f}%",
                     '',
-                    df_service['Карта_112'].nunique(),
-                    df_service['Телефон_112'].nunique(),
-                    df_service['Регион'].nunique(),
-                    df_service['Район_112'].nunique()
+                    df_service[card_col].nunique(),
+                    df_service['Номер телефона'].nunique() if 'Номер телефона' in df_service.columns else df_service.get('Телефон_112', pd.Series([0])).nunique(),
+                    df_service['Регион'].nunique() if 'Регион' in df_service.columns else 0,
+                    df_service['Район'].nunique() if 'Район' in df_service.columns else df_service.get('Район_112', pd.Series([0])).nunique()
                 ]
             }
             df_summary = pd.DataFrame(summary_data)
@@ -116,84 +130,103 @@ def create_service_reports_with_regions(df):
             print(f"  ✓ Лист СВОДКА")
             
             # ЛИСТ 2: АНАЛИЗ ПО РЕГИОНАМ
-            region_analysis = df_service.groupby('Регион').agg({
-                'Инцидент_112': 'count',
-                'Категория': lambda x: (x == 'Положительно').sum()
-            }).reset_index()
-            region_analysis.columns = ['Регион', 'Всего записей', 'Положительно']
-            region_analysis['Отрицательно'] = df_service.groupby('Регион').apply(
-                lambda x: (x['Категория'] == 'Отрицательно').sum()
-            ).values
-            region_analysis['% Положительных'] = (
-                region_analysis['Положительно'] / region_analysis['Всего записей'] * 100
-            ).round(1)
-            region_analysis = region_analysis.sort_values('Всего записей', ascending=False)
-            region_analysis.to_excel(writer, sheet_name='ПО_РЕГИОНАМ', index=False)
-            print(f"  ✓ Лист ПО_РЕГИОНАМ ({len(region_analysis)} регионов)")
+            region_col = 'Регион' if 'Регион' in df_service.columns else 'Область'
+            if region_col in df_service.columns:
+                region_analysis = df_service.groupby(region_col).agg({
+                    card_col: 'count',
+                    'Категория': lambda x: (x == 'Положительно').sum()
+                }).reset_index()
+                region_analysis.columns = ['Регион', 'Всего записей', 'Положительно']
+                region_analysis['Отрицательно'] = df_service.groupby(region_col).apply(
+                    lambda x: (x['Категория'] == 'Отрицательно').sum()
+                ).values
+                region_analysis['% Положительных'] = (
+                    region_analysis['Положительно'] / region_analysis['Всего записей'] * 100
+                ).round(1)
+                region_analysis = region_analysis.sort_values('Всего записей', ascending=False)
+                region_analysis.to_excel(writer, sheet_name='ПО_РЕГИОНАМ', index=False)
+                print(f"  ✓ Лист ПО_РЕГИОНАМ ({len(region_analysis)} регионов)")
+            else:
+                print(f"  ⚠ Колонка региона не найдена, пропускаем анализ по регионам")
             
             # ЛИСТ 3: АНАЛИЗ ПО РАЙОНАМ (ТОП-100)
-            district_analysis = df_service.groupby('Район_112').agg({
-                'Инцидент_112': 'count',
-                'Категория': lambda x: (x == 'Положительно').sum()
-            }).reset_index()
-            district_analysis.columns = ['Район', 'Всего записей', 'Положительно']
-            district_analysis['Отрицательно'] = df_service.groupby('Район_112').apply(
-                lambda x: (x['Категория'] == 'Отрицательно').sum()
-            ).values
-            district_analysis['% Положительных'] = (
-                district_analysis['Положительно'] / district_analysis['Всего записей'] * 100
-            ).round(1)
-            district_analysis = district_analysis.sort_values('Всего записей', ascending=False).head(100)
-            district_analysis.to_excel(writer, sheet_name='ПО_РАЙОНАМ_ТОП100', index=False)
-            print(f"  ✓ Лист ПО_РАЙОНАМ (топ-100)")
+            district_col = 'Район' if 'Район' in df_service.columns else 'Район_112'
+            if district_col in df_service.columns:
+                district_analysis = df_service.groupby(district_col).agg({
+                    card_col: 'count',
+                    'Категория': lambda x: (x == 'Положительно').sum()
+                }).reset_index()
+                district_analysis.columns = ['Район', 'Всего записей', 'Положительно']
+                district_analysis['Отрицательно'] = df_service.groupby(district_col).apply(
+                    lambda x: (x['Категория'] == 'Отрицательно').sum()
+                ).values
+                district_analysis['% Положительных'] = (
+                    district_analysis['Положительно'] / district_analysis['Всего записей'] * 100
+                ).round(1)
+                district_analysis = district_analysis.sort_values('Всего записей', ascending=False).head(100)
+                district_analysis.to_excel(writer, sheet_name='ПО_РАЙОНАМ_ТОП100', index=False)
+                print(f"  ✓ Лист ПО_РАЙОНАМ (топ-100)")
+            else:
+                print(f"  ⚠ Колонка района не найдена, пропускаем анализ по районам")
             
             # ЛИСТ 4: АНАЛИЗ ПО ОПЕРАТОРАМ (ТОП-50)
-            operator_analysis = df_service.groupby('Оператор_112').agg({
-                'Инцидент_112': 'count',
-                'Категория': lambda x: (x == 'Положительно').sum()
-            }).reset_index()
-            operator_analysis.columns = ['Оператор', 'Всего записей', 'Положительно']
-            operator_analysis['Отрицательно'] = df_service.groupby('Оператор_112').apply(
-                lambda x: (x['Категория'] == 'Отрицательно').sum()
-            ).values
-            operator_analysis['% Положительных'] = (
-                operator_analysis['Положительно'] / operator_analysis['Всего записей'] * 100
-            ).round(1)
-            operator_analysis = operator_analysis.sort_values('Всего записей', ascending=False).head(50)
-            operator_analysis.to_excel(writer, sheet_name='ПО_ОПЕРАТОРАМ_ТОП50', index=False)
-            print(f"  ✓ Лист ПО_ОПЕРАТОРАМ (топ-50)")
+            operator_col = 'Оператор' if 'Оператор' in df_service.columns else 'Оператор_112'
+            if operator_col in df_service.columns:
+                operator_analysis = df_service.groupby(operator_col).agg({
+                    card_col: 'count',
+                    'Категория': lambda x: (x == 'Положительно').sum()
+                }).reset_index()
+                operator_analysis.columns = ['Оператор', 'Всего записей', 'Положительно']
+                operator_analysis['Отрицательно'] = df_service.groupby(operator_col).apply(
+                    lambda x: (x['Категория'] == 'Отрицательно').sum()
+                ).values
+                operator_analysis['% Положительных'] = (
+                    operator_analysis['Положительно'] / operator_analysis['Всего записей'] * 100
+                ).round(1)
+                operator_analysis = operator_analysis.sort_values('Всего записей', ascending=False).head(50)
+                operator_analysis.to_excel(writer, sheet_name='ПО_ОПЕРАТОРАМ_ТОП50', index=False)
+                print(f"  ✓ Лист ПО_ОПЕРАТОРАМ (топ-50)")
+            else:
+                print(f"  ⚠ Колонка оператора не найдена, пропускаем анализ по операторам")
             
             # ЛИСТ 5: АНАЛИЗ ПО СТАТУСАМ
-            status_analysis = df_service.groupby('Статус_112').agg({
-                'Инцидент_112': 'count',
-                'Категория': lambda x: (x == 'Положительно').sum()
-            }).reset_index()
-            status_analysis.columns = ['Статус', 'Всего записей', 'Положительно']
-            status_analysis['Отрицательно'] = df_service.groupby('Статус_112').apply(
-                lambda x: (x['Категория'] == 'Отрицательно').sum()
-            ).values
-            status_analysis['% от общего'] = (
-                status_analysis['Всего записей'] / len(df_service) * 100
-            ).round(1)
-            status_analysis = status_analysis.sort_values('Всего записей', ascending=False)
-            status_analysis.to_excel(writer, sheet_name='ПО_СТАТУСАМ', index=False)
-            print(f"  ✓ Лист ПО_СТАТУСАМ ({len(status_analysis)} статусов)")
+            if status_col in df_service.columns:
+                status_analysis = df_service.groupby(status_col).agg({
+                    card_col: 'count',
+                    'Категория': lambda x: (x == 'Положительно').sum()
+                }).reset_index()
+                status_analysis.columns = ['Статус', 'Всего записей', 'Положительно']
+                status_analysis['Отрицательно'] = df_service.groupby(status_col).apply(
+                    lambda x: (x['Категория'] == 'Отрицательно').sum()
+                ).values
+                status_analysis['% от общего'] = (
+                    status_analysis['Всего записей'] / len(df_service) * 100
+                ).round(1)
+                status_analysis = status_analysis.sort_values('Всего записей', ascending=False)
+                status_analysis.to_excel(writer, sheet_name='ПО_СТАТУСАМ', index=False)
+                print(f"  ✓ Лист ПО_СТАТУСАМ ({len(status_analysis)} статусов)")
+            else:
+                print(f"  ⚠ Колонка статуса не найдена, пропускаем анализ по статусам")
             
             # ЛИСТ 6: АНАЛИЗ ПО АГЕНТАМ
-            agent_analysis = df_service.groupby('Документ').agg({
-                'Инцидент_112': 'count',
-                'Категория': lambda x: (x == 'Положительно').sum()
-            }).reset_index()
-            agent_analysis.columns = ['Агент', 'Всего записей', 'Положительно']
-            agent_analysis['Отрицательно'] = df_service.groupby('Документ').apply(
-                lambda x: (x['Категория'] == 'Отрицательно').sum()
-            ).values
-            agent_analysis['% Положительных'] = (
-                agent_analysis['Положительно'] / agent_analysis['Всего записей'] * 100
-            ).round(1)
-            agent_analysis = agent_analysis.sort_values('Всего записей', ascending=False)
-            agent_analysis.to_excel(writer, sheet_name='ПО_АГЕНТАМ', index=False)
-            print(f"  ✓ Лист ПО_АГЕНТАМ ({len(agent_analysis)} агентов)")
+            agent_col = 'Документ' if 'Документ' in df_service.columns else 'Оператор фиксировавший'
+            if agent_col in df_service.columns:
+                agent_analysis = df_service.groupby(agent_col).agg({
+                    card_col: 'count',
+                    'Категория': lambda x: (x == 'Положительно').sum()
+                }).reset_index()
+                agent_analysis.columns = ['Агент', 'Всего записей', 'Положительно']
+                agent_analysis['Отрицательно'] = df_service.groupby(agent_col).apply(
+                    lambda x: (x['Категория'] == 'Отрицательно').sum()
+                ).values
+                agent_analysis['% Положительных'] = (
+                    agent_analysis['Положительно'] / agent_analysis['Всего записей'] * 100
+                ).round(1)
+                agent_analysis = agent_analysis.sort_values('Всего записей', ascending=False)
+                agent_analysis.to_excel(writer, sheet_name='ПО_АГЕНТАМ', index=False)
+                print(f"  ✓ Лист ПО_АГЕНТАМ ({len(agent_analysis)} агентов)")
+            else:
+                print(f"  ⚠ Колонка агента не найдена, пропускаем анализ по агентам")
             
             # ЛИСТ 7: ПОЛОЖИТЕЛЬНЫЕ (до 50K)
             df_positive = df_service[df_service['Категория'] == 'Положительно'].copy()

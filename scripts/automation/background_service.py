@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Пути к скриптам
 BASE_DIR = Path(__file__).parent.parent.parent
-COLLECTOR_SCRIPT = BASE_DIR / "scripts" / "data_collection" / "daily_db_collector.py"
+COLLECTOR_SCRIPT = BASE_DIR / "scripts" / "data_collection" / "sheets_to_db_collector.py"
 ANALYTICS_SCRIPT = BASE_DIR / "scripts" / "automation" / "auto_analytics.py"
 APPLICATIONS_SCRIPT = BASE_DIR / "scripts" / "automation" / "process_applications.py"
 

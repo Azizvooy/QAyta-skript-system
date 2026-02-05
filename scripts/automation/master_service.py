@@ -71,7 +71,7 @@ def daily_tasks():
     tasks = [
         # 1. Сбор данных FIKSA из Google Sheets
         {
-            'script': BASE_DIR / 'scripts' / 'data_collection' / 'improved_collector.py',
+            'script': BASE_DIR / 'scripts' / 'data_collection' / 'sheets_to_db_collector.py',
             'description': '1. Сбор данных FIKSA (только со статусом)'
         },
         
@@ -117,7 +117,7 @@ def hourly_tasks():
     
     # Быстрый сбор новых данных FIKSA
     run_script(
-        BASE_DIR / 'scripts' / 'data_collection' / 'improved_collector.py',
+        BASE_DIR / 'scripts' / 'data_collection' / 'sheets_to_db_collector.py',
         'Синхронизация данных FIKSA'
     )
 

@@ -1,148 +1,88 @@
-#!/usr/bin/env python3
 """
-Ежечасное обновление данных из Google Sheets
-Запускается автоматически каждый час даже если ПК спал
+Скрипт автоматического обновления данных каждый час
+Запускается в фоновом режиме и обновляет данные из Google Sheets
+"""
 
-Работает в фоне и логирует все действия
-"""
+import schedule
 import time
 import subprocess
-import sys
 import logging
-from pathlib import Path
 from datetime import datetime
+import os
+import sys
 
-# Директории
-BASE_DIR = Path(__file__).resolve().parent
-SCRIPTS_DIR = BASE_DIR / 'scripts'
-COLLECTOR_SCRIPT = SCRIPTS_DIR / 'data_collection' / 'improved_collector.py'
-ANALYTICS_SCRIPT = SCRIPTS_DIR / 'analytics' / 'analytics_reports.py'
-LOGS_DIR = BASE_DIR / 'logs'
-LOG_FILE = LOGS_DIR / 'update_hourly.log'
-
-# Создаем папку логов
-LOGS_DIR.mkdir(exist_ok=True)
-
-# Конфигурация логирования
+# Настройка логирования
 logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler()
+        logging.FileHandler('data/hourly_update.log', encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
     ]
 )
+
 logger = logging.getLogger(__name__)
 
-def run_command(script_path, name):
-    """Запустить скрипт и получить результат"""
-    logger.info(f"Начинаю {name}...")
-    
+def update_data():
+    """Обновление данных из Google Sheets"""
     try:
+        logger.info("=" * 60)
+        logger.info("🔄 Начало обновления данных")
+        logger.info("=" * 60)
+        
+        # Запуск НОВОГО скрипта обновления (для новой структуры БД)
         result = subprocess.run(
-            [sys.executable, str(script_path)],
+            [sys.executable, 'scripts/data_collection/sheets_to_db_collector.py'],
             capture_output=True,
             text=True,
-            encoding='utf-8',
-            errors='ignore',
-            timeout=600  # 10 минут максимум
+            encoding='utf-8'
         )
         
         if result.returncode == 0:
-            logger.info(f"✅ {name} успешно выполнено")
-            
-            # Парсим вывод для получения статистики
-            if result.stdout:
-                lines = result.stdout.split('\n')
-                for line in lines[-10:]:  # Последние 10 строк
-                    if line.strip():
-                        logger.info(f"   {line.strip()}")
-            return True
+            logger.info("✅ Данные успешно обновлены!")
+            logger.info(f"Вывод: {result.stdout[:200]}")
         else:
-            logger.error(f"❌ Ошибка при {name}")
-            if result.stderr:
-                logger.error(f"   {result.stderr[:500]}")
-            return False
+            logger.error(f"❌ Ошибка при обновлении данных!")
+            logger.error(f"Код ошибки: {result.returncode}")
+            logger.error(f"Вывод: {result.stderr[:500]}")
             
-    except subprocess.TimeoutExpired:
-        logger.error(f"⏱ Превышено время ожидания для {name} (10 минут)")
-        return False
     except Exception as e:
-        logger.error(f"❌ Ошибка: {str(e)}", exc_info=True)
-        return False
-
-def update_data():
-    """Полное обновление данных"""
-    logger.info("=" * 80)
-    logger.info("НАЧАЛО ЕЖЕЧАСНОГО ОБНОВЛЕНИЯ")
-    logger.info("=" * 80)
+        logger.error(f"❌ Критическая ошибка: {e}", exc_info=True)
     
-    # 1. Обновляем данные из Google Sheets
-    if COLLECTOR_SCRIPT.exists():
-        success1 = run_command(COLLECTOR_SCRIPT, "обновление данных из Google Sheets")
-    else:
-        logger.warning(f"Скрипт не найден: {COLLECTOR_SCRIPT}")
-        success1 = False
-    
-    time.sleep(2)
-    
-    # 2. Генерируем отчеты
-    if ANALYTICS_SCRIPT.exists():
-        success2 = run_command(ANALYTICS_SCRIPT, "генерация отчетов")
-    else:
-        logger.warning(f"Скрипт не найден: {ANALYTICS_SCRIPT}")
-        success2 = False
-    
-    logger.info("=" * 80)
-    if success1 or success2:
-        logger.info("✅ ОБНОВЛЕНИЕ ЗАВЕРШЕНО УСПЕШНО")
-    else:
-        logger.warning("⚠️  ОБНОВЛЕНИЕ ЗАВЕРШЕНО С ОШИБКАМИ")
-    logger.info("=" * 80)
-    logger.info("")
+    logger.info(f"⏰ Следующее обновление в {datetime.now().hour + 1}:00")
+    logger.info("-" * 60)
 
 def main():
-    """Основной цикл - обновление каждый час"""
-    logger.info("🟢 Сервис автоматического обновления запущен")
-    logger.info("   Бот будет обновлять данные каждый час")
-    logger.info("   Даже если компьютер в режиме сна, обновится при пробуждении")
-    logger.info("   Логи: " + str(LOG_FILE))
-    logger.info("")
+    """Основная функция запуска планировщика"""
+    logger.info("=" * 60)
+    logger.info("🚀 ЗАПУСК АВТОМАТИЧЕСКОГО ОБНОВЛЕНИЯ")
+    logger.info("=" * 60)
+    logger.info("⏰ Расписание: каждый час")
+    logger.info(f"📂 Рабочая директория: {os.getcwd()}")
+    logger.info("=" * 60)
     
-    # Первое обновление сразу при запуске
+    # Сразу выполняем первое обновление
+    logger.info("🔄 Выполнение первичного обновления...")
     update_data()
     
-    # Далее каждый час
-    while True:
-        try:
-            logger.info(f"⏰ Следующее обновление через 1 час ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
-            # Ждем 1 час (3600 секунд)
-            time.sleep(3600)
-            update_data()
-        except KeyboardInterrupt:
-            logger.info("\n⛔ Сервис остановлен пользователем")
-            break
-        except Exception as e:
-            logger.error(f"❌ Неожиданная ошибка: {e}", exc_info=True)
-            logger.info("⏰ Повторю попытку через 1 минуту...")
-            time.sleep(60)
+    # Планируем обновления каждый час
+    schedule.every().hour.at(":00").do(update_data)
+    
+    logger.info("✅ Планировщик запущен и работает")
+    logger.info("💡 Для остановки нажмите Ctrl+C")
+    logger.info("=" * 60)
+    
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(60)  # Проверяем каждую минуту
+            
+    except KeyboardInterrupt:
+        logger.info("\n" + "=" * 60)
+        logger.info("🛑 Планировщик остановлен пользователем")
+        logger.info("=" * 60)
+    except Exception as e:
+        logger.error(f"❌ Критическая ошибка: {e}", exc_info=True)
 
-def test_mode():
-    """Режим тестирования - обновление один раз"""
-    logger.info("📝 РЕЖИМ ТЕСТИРОВАНИЯ - обновление один раз")
-    logger.info("")
-    update_data()
-    logger.info("✅ Тестирование завершено")
-    sys.exit(0)
-
-if __name__ == '__main__':
-    # Если передан аргумент 'test' - запустить один раз для тестирования
-    if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        test_mode()
-    else:
-        # Нормальный режим - фоновое обновление каждый час
-        try:
-            main()
-        except Exception as e:
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: {e}", exc_info=True)
-            sys.exit(1)
+if __name__ == "__main__":
+    main()

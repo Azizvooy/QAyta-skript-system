@@ -101,7 +101,7 @@ async def update_fiksa_data(update: Update = None, send_message=True):
     """Обновление данных из Google Sheets"""
     logger.info("Начало обновления данных FIKSA")
     
-    collector_script = BASE_DIR / 'scripts' / 'data_collection' / 'improved_collector.py'
+    collector_script = BASE_DIR / 'scripts' / 'data_collection' / 'sheets_to_db_collector.py'
     
     if not collector_script.exists():
         msg = f"❌ Скрипт сбора не найден: {collector_script}"

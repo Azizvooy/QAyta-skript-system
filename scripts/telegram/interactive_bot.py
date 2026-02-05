@@ -85,6 +85,8 @@ def get_stats():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start - главное меню"""
+    logger.info(f"Команда /start от пользователя {update.effective_user.id}")
+    
     keyboard = [
         [InlineKeyboardButton("📊 Статистика", callback_data='stats')],
         [InlineKeyboardButton("👥 Операторы", callback_data='operators')],
@@ -111,10 +113,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Или отправьте текстовый запрос!
     """
     
-    if update.callback_query:
-        await update.callback_query.edit_message_text(text, parse_mode='HTML', reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
+    try:
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, parse_mode='HTML', reply_markup=reply_markup)
+        else:
+            await update.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
+        logger.info("Меню успешно отправлено")
+    except Exception as e:
+        logger.error(f"Ошибка отправки меню: {e}", exc_info=True)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /help - помощь"""
@@ -152,8 +158,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать статистику"""
-    query = update.callback_query
-    await query.answer()
+    logger.info("Запрос статистики")
+    
+    # Проверяем откуда пришел запрос - от кнопки или команды
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        send_func = query.edit_message_text
+    else:
+        # Вызов из команды /stats
+        send_func = update.message.reply_text
     
     stats = get_stats()
     
@@ -177,7 +191,7 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='start')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=reply_markup)
+    await send_func(text, parse_mode='HTML', reply_markup=reply_markup)
 
 # =============================================================================
 # ОПЕРАТОРЫ
@@ -403,7 +417,7 @@ async def update_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         result = subprocess.run(
-            [sys.executable, str(BASE_DIR / 'scripts' / 'data_collection' / 'improved_collector.py')],
+            [sys.executable, str(BASE_DIR / 'scripts' / 'data_collection' / 'sheets_to_db_collector.py')],
             capture_output=True,
             text=True,
             encoding='utf-8',
@@ -434,6 +448,7 @@ async def update_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых запросов"""
     text = update.message.text.lower()
+    logger.info(f"Текстовое сообщение от {update.effective_user.id}: {text}")
     
     # Статистика
     if any(word in text for word in ['статистика', 'сколько', 'данных', 'база']):
@@ -467,7 +482,7 @@ FIKSA: {stats['fiksa']:,} записей
     elif any(word in text for word in ['обнов', 'синхр', 'загруз']):
         await update.message.reply_text("⏳ Запускаю обновление...")
         subprocess.Popen(
-            [sys.executable, str(BASE_DIR / 'scripts' / 'data_collection' / 'improved_collector.py')],
+            [sys.executable, str(BASE_DIR / 'scripts' / 'data_collection' / 'sheets_to_db_collector.py')],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
