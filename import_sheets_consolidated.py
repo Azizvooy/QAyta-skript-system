@@ -19,10 +19,10 @@ from googleapiclient.discovery import build
 import socket
 import pandas as pd
 
-# Прокси
-os.environ['HTTP_PROXY'] = 'http://10.145.62.76:3128'
-os.environ['HTTPS_PROXY'] = 'http://10.145.62.76:3128'
-socket.setdefaulttimeout(120)
+# Прокси (закомментировано для работы в Codespaces)
+# os.environ['HTTP_PROXY'] = 'http://10.145.62.76:3128'
+# os.environ['HTTPS_PROXY'] = 'http://10.145.62.76:3128'
+# socket.setdefaulttimeout(120)
 
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / 'data' / 'fiksa_database.db'
@@ -105,6 +105,19 @@ print(f'📋 Документов: {len(SPREADSHEET_IDS)}')
 print(f'📄 Листов для поиска: {len(SHEETS_TO_IMPORT)}')
 print('='*80)
 
+def is_target_sheet(sheet_name):
+    """Фильтр нужных листов: FIKSA, FIKSA(...), ФИО 01.2026"""
+    if not sheet_name:
+        return False
+    name = str(sheet_name).strip()
+    if name == 'FIKSA':
+        return True
+    if name.startswith('FIKSA'):
+        return True
+    if '01.2026' in name:
+        return True
+    return False
+
 # =============================================================================
 # АУТЕНТИФИКАЦИЯ
 # =============================================================================
@@ -134,11 +147,11 @@ def authenticate():
 # ПОЛУЧЕНИЕ ДАННЫХ
 # =============================================================================
 
-def get_sheet_data(service, spreadsheet_id, sheet_name):
+def get_sheet_data(service, spreadsheet_id, sheet_name, max_rows=10000):
     """Получить данные с указанного листа"""
     try:
         # Читаем весь лист
-        range_name = f"'{sheet_name}'!A1:Z10000"
+        range_name = f"'{sheet_name}'!A1:L{max_rows}"
         result = service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
             range=range_name
@@ -148,6 +161,21 @@ def get_sheet_data(service, spreadsheet_id, sheet_name):
         return values
     except Exception as e:
         # Тихо пропускаем ошибки (лист может не существовать)
+        return []
+
+def get_all_sheet_names(service, spreadsheet_id):
+    """Получить список всех листов в документе с размером"""
+    try:
+        spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        sheets = spreadsheet.get('sheets', [])
+        return [
+            {
+                'title': sheet['properties']['title'],
+                'rowCount': sheet['properties'].get('gridProperties', {}).get('rowCount', 10000)
+            }
+            for sheet in sheets
+        ]
+    except:
         return []
 
 def get_spreadsheet_title(service, spreadsheet_id):
@@ -161,6 +189,7 @@ def get_spreadsheet_title(service, spreadsheet_id):
 def process_sheet_data_consolidated(values, sheet_name, doc_title, doc_id):
     """
     Обработать данные с листа - взять колонки 2-12 (индексы 1-11)
+    ИМПОРТИРУЕМ ВСЕ СТРОКИ БЕЗ ФИЛЬТРАЦИИ
     """
     if not values or len(values) < 2:
         return []
@@ -169,7 +198,7 @@ def process_sheet_data_consolidated(values, sheet_name, doc_title, doc_id):
     
     # Пропускаем заголовок и берём данные со строки 2
     for row_idx, row in enumerate(values[1:], start=2):
-        if not row or not any(row):  # Пропускаем пустые строки
+        if not row or not any(row):  # Пропускаем только полностью пустые строки
             continue
         
         # Берём колонки 2-12 (индексы 1-11 в Python)
@@ -219,11 +248,16 @@ def main():
                 doc_title = get_spreadsheet_title(service, spreadsheet_id)
                 print(f'\n  [{idx}/{len(SPREADSHEET_IDS)}] {doc_title}')
                 
+                # Получаем ВСЕ листы в документе
+                all_sheets = get_all_sheet_names(service, spreadsheet_id)
+                
                 doc_records = 0
                 
-                # Импортируем данные с каждого листа
-                for sheet_name in SHEETS_TO_IMPORT:
-                    values = get_sheet_data(service, spreadsheet_id, sheet_name)
+                # Импортируем данные с КАЖДОГО листа в документе
+                for sheet_info in all_sheets:
+                    sheet_name = sheet_info['title']
+                    max_rows = sheet_info['rowCount']
+                    values = get_sheet_data(service, spreadsheet_id, sheet_name, max_rows=max_rows)
                     
                     if values:
                         records = process_sheet_data_consolidated(
@@ -237,7 +271,8 @@ def main():
                             stats['sheets_found'][sheet_name] = 0
                         stats['sheets_found'][sheet_name] += len(records)
                         
-                        print(f'    ✓ {sheet_name}: {len(records)} записей')
+                        if len(records) > 0:
+                            print(f'    ✓ {sheet_name}: {len(records)} записей')
                 
                 stats['processed'] += 1
                 stats['success'] += 1
@@ -271,6 +306,34 @@ def main():
             print(f'\n✅ Сохранено в CSV: {csv_file.name}')
             print(f'   Всего строк: {len(df)}')
             print(f'   Колонок: {len(columns)}')
+
+            # Сохраняем в SQLite
+            try:
+                DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+                conn = sqlite3.connect(DB_PATH)
+                cur = conn.cursor()
+                cur.execute('DROP TABLE IF EXISTS sheets_data')
+                cur.execute('''
+                    CREATE TABLE sheets_data (
+                        Колонка_2 TEXT, Колонка_3 TEXT, Колонка_4 TEXT, Колонка_5 TEXT, Колонка_6 TEXT,
+                        Колонка_7 TEXT, Колонка_8 TEXT, Колонка_9 TEXT, Колонка_10 TEXT, Колонка_11 TEXT, Колонка_12 TEXT,
+                        Документ TEXT, Лист TEXT, ID_Документа TEXT, Номер_Строки INTEGER
+                    )
+                ''')
+                conn.commit()
+
+                batch_size = 5000
+                rows = df.values.tolist()
+                for i in range(0, len(rows), batch_size):
+                    cur.executemany(
+                        'INSERT INTO sheets_data VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                        rows[i:i+batch_size]
+                    )
+                    conn.commit()
+                conn.close()
+                print(f'✅ Сохранено в SQLite: {DB_PATH.name}')
+            except Exception as e:
+                print(f'⚠️  Ошибка при сохранении в SQLite: {e}')
         
         # Итоговая статистика
         print('\n' + '='*80)
