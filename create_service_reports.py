@@ -19,18 +19,21 @@ print('\n' + '='*80)
 print('📊 СОЗДАНИЕ ДЕТАЛЬНОЙ ОТЧЁТНОСТИ ПО СЛУЖБАМ')
 print('='*80)
 
-# Загружаем сопоставленные данные
+# Загружаем данные из ALL_DATA_FIXED.csv
 data_dir = BASE_DIR / 'data'
-match_files = list(data_dir.glob('СОПОСТАВЛЕНИЕ_ПОЛНОЕ_*.csv'))
+data_file = data_dir / 'ALL_DATA_FIXED.csv'
 
-if not match_files:
-    print('❌ Не найдены сопоставленные данные')
+# Если не в data/, проверяем корень
+if not data_file.exists():
+    data_file = BASE_DIR / 'ALL_DATA_FIXED.csv'
+
+if not data_file.exists():
+    print(f'❌ Не найден файл данных: {data_file}')
     exit(1)
 
-match_file = max(match_files, key=lambda p: p.stat().st_mtime)
-print(f'\nЗагрузка: {match_file.name}')
+print(f'\nЗагрузка: {data_file.name}')
 
-df = pd.read_csv(match_file, encoding='utf-8-sig', low_memory=False)
+df = pd.read_csv(data_file, encoding='utf-8-sig', low_memory=False)
 print(f'Всего записей: {len(df):,}\n')
 
 # Создаём директорию для отчётов по службам
@@ -39,8 +42,16 @@ reports_dir.mkdir(exist_ok=True)
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
 
-# Получаем список служб
-services = df['Служба'].dropna().unique()
+# Получаем список служб - проверяем разные варианты названий колонки
+if 'Служба_112' in df.columns:
+    service_col = 'Служба_112'
+elif 'Служба' in df.columns:
+    service_col = 'Служба'
+else:
+    print('❌ Не найдена колонка со службой (Служба_112 или Служба)')
+    exit(1)
+
+services = df[service_col].dropna().unique()
 services = sorted([s for s in services if str(s) != 'nan'])
 
 print(f'Найдено служб: {len(services)}')
@@ -67,7 +78,7 @@ for service in services:
     print(f'[{service_key}] {service_name}...')
     
     # Фильтруем данные по службе
-    df_service = df[df['Служба'] == service].copy()
+    df_service = df[df[service_col] == service].copy()
     
     print(f'  Записей: {len(df_service):,}')
     
@@ -186,7 +197,7 @@ with open(summary_file, 'w', encoding='utf-8') as f:
     for service in sorted(services):
         service_key = str(service)
         service_name = service_names.get(service_key, f'Служба {service_key}')
-        df_service = df[df['Служба'] == service]
+        df_service = df[df[service_col] == service]
         count = len(df_service)
         pct = count / total_records * 100
         
@@ -231,7 +242,7 @@ with open(summary_file, 'w', encoding='utf-8') as f:
     for service in sorted(services):
         service_key = str(service)
         service_name = service_names.get(service_key, f'Служба {service_key}')
-        df_service = df[df['Служба'] == service]
+        df_service = df[df[service_col] == service]
         count = len(df_service)
         pct = count / total_records * 100
         
@@ -266,7 +277,7 @@ with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
     for service in sorted(services):
         service_key = str(service)
         service_name = service_names.get(service_key, f'Служба {service_key}')
-        df_service = df[df['Служба'] == service]
+        df_service = df[df[service_col] == service]
         
         summary_data.append({
             'Служба': service_key,
@@ -281,7 +292,7 @@ with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
     # Листы по каждой службе (ограничиваем первыми 50000 строк)
     for service in sorted(services):
         service_key = str(service).replace('.0', '')
-        df_service = df[df['Служба'] == service].head(50000)
+        df_service = df[df[service_col] == service].head(50000)
         
         # Отбираем ключевые колонки
         key_cols = ['Номер_карты_norm', 'Телефон_norm', 'Колонка_4', 'Колонка_5', 
