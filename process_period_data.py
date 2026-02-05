@@ -175,6 +175,16 @@ def load_sheets_data():
     df_sheets['Инцидент_Sheets_norm'] = df_sheets['Инцидент_Sheets'].astype(str).str.strip()
     df_sheets['Есть_жалоба'] = df_sheets['Жалоба'].notna() & (df_sheets['Жалоба'].astype(str).str.strip() != '')
 
+    # Фильтрация по датам 04–31.01.2026
+    print("\n✓ Фильтрация по диапазону дат 04–31.01.2026...")
+    date_series = pd.to_datetime(df_sheets['Дата_открытия'], errors='coerce', dayfirst=True)
+    start_date = pd.Timestamp('2026-01-04')
+    end_date = pd.Timestamp('2026-01-31 23:59:59')
+    before_count = len(df_sheets)
+    df_sheets = df_sheets[(date_series >= start_date) & (date_series <= end_date)].copy()
+    after_count = len(df_sheets)
+    print(f"  • Отфильтровано по датам: {before_count} -> {after_count}")
+
     # Разбор служб (может быть несколько)
     def extract_services(value):
         if value is None or (isinstance(value, float) and pd.isna(value)):
@@ -293,45 +303,11 @@ def match_data(df_sheets, df_112, period_name):
         print("\n❌ Нет данных Google Sheets для сопоставления!")
         return pd.DataFrame()
     
-    # Фильтрация Sheets по периоду и инцидентам 112
-    if 'Инцидент_Sheets_norm' in df_sheets.columns:
-        incident_set = set(df_112['Инцидент_112_norm'].dropna().unique())
-        before_count = len(df_sheets)
-        df_sheets = df_sheets[df_sheets['Инцидент_Sheets_norm'].isin(incident_set)]
-        after_count = len(df_sheets)
-        print(f"\n✓ Отфильтровано по инцидентам 112: {before_count} -> {after_count}")
-
-    # Фильтрация по периоду (например 2026-01)
-    if 'Дата_открытия' in df_sheets.columns:
-        if period_name and '-' in period_name:
-            year, month = period_name.split('-')[0], period_name.split('-')[1]
-            period_token = f"{month}.{year}"
-            mask_period = df_sheets['Дата_открытия'].astype(str).str.contains(period_token, na=False)
-            if mask_period.any():
-                df_sheets = df_sheets[mask_period]
-                print(f"✓ Отфильтровано по периоду {period_name}: {mask_period.sum()}")
-
-    # Если служба не указана в Sheets — распределяем по службам из 112 по инциденту
+    # Если служба не указана в Sheets — оставляем пустой (дальше сопоставим по инциденту)
     if 'Служба_Sheets_norm' in df_sheets.columns:
         missing_mask = df_sheets['Служба_Sheets_norm'].isin(['', 'None', 'nan']) | df_sheets['Служба_Sheets_norm'].isna()
         if missing_mask.any():
-            print(f"✓ Найдены строки без службы: {missing_mask.sum()} — распределяем по службам 112")
-            services_map = (
-                df_112.groupby('Инцидент_112_norm')['Служба_112']
-                .apply(lambda s: sorted(set(s.astype(str))))
-                .reset_index(name='Службы_112_list')
-            )
-            missing_df = df_sheets[missing_mask].merge(
-                services_map,
-                left_on='Инцидент_Sheets_norm',
-                right_on='Инцидент_112_norm',
-                how='left'
-            )
-            missing_df = missing_df[missing_df['Службы_112_list'].notna()].copy()
-            missing_df = missing_df.explode('Службы_112_list').reset_index(drop=True)
-            missing_df['Служба_Sheets_norm'] = missing_df['Службы_112_list'].astype(str).str.strip()
-            missing_df = missing_df.drop(columns=['Службы_112_list', 'Инцидент_112_norm'])
-            df_sheets = pd.concat([df_sheets[~missing_mask], missing_df], ignore_index=True)
+            print(f"✓ Найдены строки без службы: {missing_mask.sum()} — сопоставление будет по инциденту")
 
     # Считаем количество служб в каждом инциденте
     incident_counts = df_112.groupby('Инцидент_112_norm').agg({
@@ -344,21 +320,27 @@ def match_data(df_sheets, df_112, period_name):
         ['Инцидент_112_norm', 'Служба_112', 'Карта_112', 'Телефон_112', 'Статус_112', 'Регион_112', 'Район_112', 'Оператор_112', 'Дата_112']
     ]
     
-    # ОСНОВНОЕ СОПОСТАВЛЕНИЕ: ПО НОМЕРУ ИНЦИДЕНТА + СЛУЖБЕ
-    print("\n✓ Сопоставление по номеру инцидента + службе...")
-    
-    # Создаём ключи для сопоставления
-    df_sheets['match_key'] = df_sheets['Инцидент_Sheets_norm'] + '_' + df_sheets['Служба_Sheets_norm']
-    df_112_key['match_key'] = df_112_key['Инцидент_112_norm'] + '_' + df_112_key['Служба_112'].astype(str)
+    # ОСНОВНОЕ СОПОСТАВЛЕНИЕ: ПО НОМЕРУ ИНЦИДЕНТА
+    print("\n✓ Сопоставление по номеру инцидента...")
     
     result = pd.merge(
         df_sheets,
         df_112_key,
-        left_on='match_key',
-        right_on='match_key',
+        left_on='Инцидент_Sheets_norm',
+        right_on='Инцидент_112_norm',
         how='left',
         indicator=True
     )
+    
+    # Если в Sheets указана служба — оставляем только эту службу
+    if 'Служба_Sheets_norm' in result.columns:
+        has_service = ~result['Служба_Sheets_norm'].isin(['', 'None', 'nan']) & result['Служба_Sheets_norm'].notna()
+        before_filter = len(result)
+        result = pd.concat([
+            result[~has_service],
+            result[has_service & (result['Служба_Sheets_norm'].astype(str) == result['Служба_112'].astype(str))]
+        ], ignore_index=True)
+        print(f"✓ Фильтр по службе (если указана): {before_filter} -> {len(result)}")
     
     matched = result[result['_merge'] == 'both'].copy()
     unmatched = result[result['_merge'] == 'left_only'].copy()
@@ -383,29 +365,30 @@ def match_data(df_sheets, df_112, period_name):
         matched.loc[mask_no_complaint & (matched['Количество_служб_в_инциденте'] > 1), 'Тип_совпадения'] = 'Положительно - несколько служб'
         matched.loc[mask_no_complaint & (matched['Количество_служб_в_инциденте'] == 1), 'Тип_совпадения'] = 'Положительно - одна служба'
 
-        # Если есть жалоба по одной службе, добавляем положительно для остальных служб в этом инциденте
-        complaint_incidents = matched.loc[mask_complaint, 'Инцидент_112_norm'].dropna().unique().tolist()
-        if complaint_incidents:
-            extras = []
-            for incident in complaint_incidents:
-                services_in_112 = df_112[df_112['Инцидент_112_norm'] == incident]['Служба_112'].astype(str).unique().tolist()
-                complained_services = matched[(matched['Инцидент_112_norm'] == incident) & (matched['Есть_жалоба'])]['Служба_112'].astype(str).unique().tolist()
-                other_services = [s for s in services_in_112 if s not in complained_services]
-                if not other_services:
-                    continue
-                base_row = matched[(matched['Инцидент_112_norm'] == incident) & (matched['Есть_жалоба'])].iloc[0].copy()
-                for service in other_services:
-                    new_row = base_row.copy()
-                    new_row['Служба_112'] = service
-                    new_row['Служба_Sheets_norm'] = service
-                    new_row['match_key'] = f"{incident}_{service}"
-                    new_row['Жалоба'] = ''
-                    new_row['Есть_жалоба'] = False
-                    new_row['Положительно'] = 'Положительно'
-                    new_row['Тип_совпадения'] = 'Положительно - другие службы'
-                    extras.append(new_row)
-            if extras:
-                matched = pd.concat([matched, pd.DataFrame(extras)], ignore_index=True)
+        # Если в Sheets указана конкретная служба — добавляем положительно для остальных служб в этом инциденте
+        if 'Служба_Sheets_norm' in matched.columns:
+            specified_mask = ~matched['Служба_Sheets_norm'].isin(['', 'None', 'nan']) & matched['Служба_Sheets_norm'].notna()
+            specified_incidents = matched.loc[specified_mask, 'Инцидент_112_norm'].dropna().unique().tolist()
+            if specified_incidents:
+                extras = []
+                for incident in specified_incidents:
+                    services_in_112 = df_112[df_112['Инцидент_112_norm'] == incident]['Служба_112'].astype(str).unique().tolist()
+                    services_in_matched = matched[matched['Инцидент_112_norm'] == incident]['Служба_112'].astype(str).unique().tolist()
+                    other_services = [s for s in services_in_112 if s not in services_in_matched]
+                    if not other_services:
+                        continue
+                    base_row = matched[matched['Инцидент_112_norm'] == incident].iloc[0].copy()
+                    for service in other_services:
+                        new_row = base_row.copy()
+                        new_row['Служба_112'] = service
+                        new_row['Служба_Sheets_norm'] = service
+                        new_row['Жалоба'] = ''
+                        new_row['Есть_жалоба'] = False
+                        new_row['Положительно'] = 'Положительно'
+                        new_row['Тип_совпадения'] = 'Положительно - другие службы'
+                        extras.append(new_row)
+                if extras:
+                    matched = pd.concat([matched, pd.DataFrame(extras)], ignore_index=True)
         
         print("\n  Распределение по типам:")
         for type_name, count in matched['Тип_совпадения'].value_counts().items():

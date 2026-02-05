@@ -134,9 +134,16 @@ def authenticate():
             print('[AUTH] Обновление токена...')
             creds.refresh(Request())
         else:
-            print('[AUTH] Первичная авторизация...')
+            print('[AUTH] Первичная авторизация (консольный режим)...')
             flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_FILE), SCOPES)
-            creds = flow.run_local_server(port=0)
+            auth_url, _ = flow.authorization_url(prompt='consent')
+            print('\nОткройте ссылку и вставьте код авторизации:')
+            print(auth_url)
+            code = os.environ.get('GOOGLE_AUTH_CODE')
+            if not code:
+                code = input('\nКод авторизации: ').strip()
+            flow.fetch_token(code=code)
+            creds = flow.credentials
         
         with open(TOKEN_FILE, 'w') as token:
             token.write(creds.to_json())
@@ -209,6 +216,9 @@ def process_sheet_data_consolidated(values, sheet_name, doc_title, doc_id):
             else:
                 record.append('')  # Пустое значение если колонки нет
         
+        # Добавляем метку импорта в колонку L
+        record.append('Да')  # Импортирован
+
         # Добавляем мета-информацию в конец
         record.append(doc_title)  # Название документа
         record.append(sheet_name)  # Название листа
@@ -293,6 +303,7 @@ def main():
             columns = [
                 'Колонка_2', 'Колонка_3', 'Колонка_4', 'Колонка_5', 'Колонка_6',
                 'Колонка_7', 'Колонка_8', 'Колонка_9', 'Колонка_10', 'Колонка_11', 'Колонка_12',
+                'Импортирован',
                 'Документ', 'Лист', 'ID_Документа', 'Номер_Строки'
             ]
             
@@ -317,6 +328,7 @@ def main():
                     CREATE TABLE sheets_data (
                         Колонка_2 TEXT, Колонка_3 TEXT, Колонка_4 TEXT, Колонка_5 TEXT, Колонка_6 TEXT,
                         Колонка_7 TEXT, Колонка_8 TEXT, Колонка_9 TEXT, Колонка_10 TEXT, Колонка_11 TEXT, Колонка_12 TEXT,
+                        Импортирован TEXT,
                         Документ TEXT, Лист TEXT, ID_Документа TEXT, Номер_Строки INTEGER
                     )
                 ''')
@@ -326,7 +338,7 @@ def main():
                 rows = df.values.tolist()
                 for i in range(0, len(rows), batch_size):
                     cur.executemany(
-                        'INSERT INTO sheets_data VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                        'INSERT INTO sheets_data VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                         rows[i:i+batch_size]
                     )
                     conn.commit()

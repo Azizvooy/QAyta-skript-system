@@ -23,9 +23,10 @@ DB_PATH = BASE_DIR / 'data' / 'fiksa_database.db'
 REPORTS_DIR = BASE_DIR / 'reports'
 ANALYTICS_DIR = REPORTS_DIR / 'analytics'
 SERVICES_DIR = REPORTS_DIR / 'services'
+UPLOADS_DIR = BASE_DIR / '123'  # Папка для загруженных файлов 112
 
 # Создаем директории
-for dir_path in [REPORTS_DIR, ANALYTICS_DIR, SERVICES_DIR]:
+for dir_path in [REPORTS_DIR, ANALYTICS_DIR, SERVICES_DIR, UPLOADS_DIR]:
     dir_path.mkdir(exist_ok=True, parents=True)
 
 # Логи
@@ -296,34 +297,163 @@ async def send_service_report(update: Update, context: ContextTypes.DEFAULT_TYPE
 # КОМАНДЫ БОТА
 # =============================================================================
 
+# =============================================================================
+# ЗАГРУЗКА ФАЙЛОВ
+# =============================================================================
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка загруженных файлов"""
+    document = update.message.document
+    file_name = document.file_name
+    
+    # Проверяем расширение файла
+    if not (file_name.endswith('.xlsx') or file_name.endswith('.xls') or file_name.endswith('.csv')):
+        await update.message.reply_text(
+            "❌ Поддерживаются только Excel (.xlsx, .xls) и CSV (.csv) файлы"
+        )
+        return
+    
+    await update.message.reply_text(f"📥 Загружаю файл: {file_name}...")
+    
+    try:
+        # Скачиваем файл
+        file = await context.bot.get_file(document.file_id)
+        file_path = UPLOADS_DIR / file_name
+        
+        await file.download_to_drive(file_path)
+        
+        # Получаем размер файла
+        file_size = file_path.stat().st_size / (1024 * 1024)  # В MB
+        
+        msg = f"""✅ <b>Файл успешно загружен!</b>
+
+📁 Имя: <code>{file_name}</code>
+📊 Размер: {file_size:.2f} MB
+📂 Папка: 123/
+
+💡 Теперь вы можете обработать данные командой /process или через кнопку "Обработать данные"""
+        
+        # Кнопки для действий
+        keyboard = [
+            [InlineKeyboardButton("📊 Обработать данные", callback_data='process_data')],
+            [InlineKeyboardButton("📋 Список файлов", callback_data='list_files')],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data='start')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(msg, parse_mode='HTML', reply_markup=reply_markup)
+        
+        logger.info(f"Файл загружен: {file_name} ({file_size:.2f} MB)")
+        
+    except Exception as e:
+        error_msg = f"❌ Ошибка при загрузке файла: {str(e)}"
+        await update.message.reply_text(error_msg)
+        logger.error(error_msg, exc_info=True)
+
+async def list_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать список файлов в папке 123"""
+    try:
+        files = list(UPLOADS_DIR.glob('*.xlsx')) + list(UPLOADS_DIR.glob('*.xls')) + list(UPLOADS_DIR.glob('*.csv'))
+        
+        if not files:
+            await update.effective_message.reply_text("📂 Папка 123/ пуста")
+            return
+        
+        msg = "<b>📁 Файлы в папке 123/:</b>\n\n"
+        for i, file in enumerate(sorted(files, key=lambda x: x.stat().st_mtime, reverse=True), 1):
+            size = file.stat().st_size / (1024 * 1024)  # В MB
+            mod_time = datetime.fromtimestamp(file.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
+            msg += f"{i}. <code>{file.name}</code>\n   📊 {size:.2f} MB | 🕐 {mod_time}\n\n"
+        
+        keyboard = [
+            [InlineKeyboardButton("📊 Обработать все файлы", callback_data='process_data')],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data='start')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.effective_message.reply_text(msg, parse_mode='HTML', reply_markup=reply_markup)
+        
+    except Exception as e:
+        await update.effective_message.reply_text(f"❌ Ошибка: {str(e)}")
+        logger.error(f"Ошибка получения списка файлов: {e}", exc_info=True)
+
+async def process_uploaded_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка загруженных файлов из папки 123"""
+    await update.effective_message.reply_text("🔄 Начинаю обработку данных из папки 123/...")
+    
+    process_script = BASE_DIR / 'process_period_data.py'
+    
+    if not process_script.exists():
+        await update.effective_message.reply_text(f"❌ Скрипт не найден: {process_script}")
+        return
+    
+    try:
+        result = subprocess.run(
+            [sys.executable, str(process_script)],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='ignore',
+            timeout=600
+        )
+        
+        if result.returncode == 0:
+            msg = "✅ Данные обработаны!\n\n📊 Отчёты созданы в папке reports/"
+            await update.effective_message.reply_text(msg)
+            
+            # Показываем статистику
+            await asyncio.sleep(1)
+            await show_stats(update, None)
+        else:
+            error = result.stderr[:500] if result.stderr else "Неизвестная ошибка"
+            await update.effective_message.reply_text(f"❌ Ошибка обработки:\n{error}")
+            
+    except subprocess.TimeoutExpired:
+        await update.effective_message.reply_text("⏱ Превышено время ожидания (10 минут)")
+    except Exception as e:
+        await update.effective_message.reply_text(f"❌ Ошибка: {str(e)}")
+        logger.error(f"Ошибка обработки данных: {e}", exc_info=True)
+
+# =============================================================================
+# КОМАНДЫ БОТА
+# =============================================================================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Главное меню"""
     keyboard = [
-        [InlineKeyboardButton("📊 Статистика", callback_data='stats')],
-        [InlineKeyboardButton("👥 Операторы", callback_data='operators')],
-        [InlineKeyboardButton("🚨 Фидбэки", callback_data='feedback')],
-        [InlineKeyboardButton("📞 Служба 102", callback_data='service_102'),
-         InlineKeyboardButton("📞 Служба 103", callback_data='service_103')],
-        [InlineKeyboardButton("📞 Служба 104", callback_data='service_104')],
-        [InlineKeyboardButton("🔄 Обновить данные", callback_data='update_data')],
-        [InlineKeyboardButton("📋 Обновить + Отчеты", callback_data='full_update')],
+        [InlineKeyboardButton("� Загрузить файл 112", callback_data='upload_info')],
+        [InlineKeyboardButton("📋 Список файлов", callback_data='list_files')],
+        [InlineKeyboardButton("📊 Обработать данные", callback_data='process_data')],
+        [InlineKeyboardButton("📈 Статистика БД", callback_data='stats')],
+        [InlineKeyboardButton("🔄 Обновить данные FIKSA", callback_data='update_data')],
+        [
+            InlineKeyboardButton("👥 Операторы", callback_data='operators'),
+            InlineKeyboardButton("📋 Фидбэки", callback_data='feedback')
+        ],
+        [
+            InlineKeyboardButton("🚑 Служба 102", callback_data='service_102'),
+            InlineKeyboardButton("🚓 Служба 103", callback_data='service_103'),
+        ],
+        [InlineKeyboardButton("🚒 Служба 104", callback_data='service_104')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     text = """
-🤖 <b>TELEGRAM БОТ FIKSA</b>
+🤖 <b>TELEGRAM БОТ QYTA</b>
 
 Выберите действие:
 
-📊 <b>Статистика</b> - текущее состояние БД
+📥 <b>Загрузить файл 112</b> - загрузить данные из системы 112
+📋 <b>Список файлов</b> - просмотр загруженных файлов
+📊 <b>Обработать данные</b> - создать отчёты из файлов
+📈 <b>Статистика БД</b> - текущее состояние базы данных
+
+🔄 <b>Обновить FIKSA</b> - получить данные из Google Sheets
 👥 <b>Операторы</b> - отчет по операторам
-🚨 <b>Фидбэки</b> - отчет по службам
-📞 <b>Служба 102/103/104</b> - детальные отчеты
+📋 <b>Фидбэки</b> - отчет по службам
+🚑🚓🚒 <b>Службы 102/103/104</b> - детальные отчеты
 
-🔄 <b>Обновить данные</b> - собрать из Google Sheets
-📋 <b>Обновить + Отчеты</b> - полный цикл
-
-<i>Бот работает 24/7</i>
+<i>Бот работает 24/7 | Файлы сохраняются в папку 123/</i>
 """
     
     await update.effective_message.reply_text(
@@ -394,6 +524,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    # Обработчик для инструкции по загрузке
+    if query.data == 'upload_info':
+        msg = """📥 <b>Как загрузить файл:</b>
+
+1️⃣ Просто отправьте файл (.xlsx, .xls, .csv) в этот чат
+2️⃣ Файл автоматически сохранится в папку 123/
+3️⃣ Нажмите "Обработать данные" для создания отчётов
+
+💡 <b>Поддерживаемые форматы:</b>
+• Excel (.xlsx, .xls)
+• CSV (.csv)
+
+📁 Файлы должны быть из системы 112"""
+        
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data='start')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text(msg, parse_mode='HTML', reply_markup=reply_markup)
+        return
+    
     handlers = {
         'start': start,
         'stats': show_stats,
@@ -404,6 +553,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'service_104': lambda u, c: send_service_report(u, c, 104),
         'update_data': update_fiksa_data,
         'full_update': full_update,
+        'list_files': list_files,
+        'process_data': process_uploaded_data,
     }
     
     handler = handlers.get(query.data)
@@ -472,6 +623,9 @@ Chat ID: {CHAT_ID}
         app.add_handler(CommandHandler('service102', lambda u, c: send_service_report(u, c, 102)))
         app.add_handler(CommandHandler('service103', lambda u, c: send_service_report(u, c, 103)))
         app.add_handler(CommandHandler('service104', lambda u, c: send_service_report(u, c, 104)))
+        
+        # Обработчик документов (файлов)
+        app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
         
         # Кнопки и текст
         app.add_handler(CallbackQueryHandler(button_handler))
