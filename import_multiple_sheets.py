@@ -176,7 +176,8 @@ def process_sheet_data(values, sheet_name, doc_title):
             'источник': doc_title,
             'лист': sheet_name,
             'строка': idx,
-            'дата_импорта': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'дата_импорта': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Импортирован': 'Да'
         }
         
         # Добавляем данные из столбцов
